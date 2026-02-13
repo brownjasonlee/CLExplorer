@@ -485,7 +485,7 @@
       controlsCollapsed: false
     };
 
-    function setControlsCollapsed(collapsed) {
+    function setControlsCollapsed(collapsed, shouldResize = true) {
       state.controlsCollapsed = collapsed;
       appEl.classList.toggle("controls-collapsed", collapsed);
       controls.toggleControls.innerHTML = collapsed ? "&rsaquo;" : "&lsaquo;";
@@ -496,7 +496,9 @@
       } catch (_err) {
         // ignore storage failures
       }
-      resizeCanvas();
+      if (shouldResize) {
+        resizeCanvas();
+      }
     }
 
     function pointKey(p) {
@@ -648,9 +650,9 @@
     bindFilterUI();
     renderPathPanel();
     try {
-      setControlsCollapsed(localStorage.getItem("clx_controls_collapsed") === "1");
+      setControlsCollapsed(localStorage.getItem("clx_controls_collapsed") === "1", false);
     } catch (_err) {
-      setControlsCollapsed(false);
+      setControlsCollapsed(false, false);
     }
 
     function resizeCanvas() {
