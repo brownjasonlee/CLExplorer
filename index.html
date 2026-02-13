@@ -483,8 +483,11 @@
       selectedB: null,
       showPathLine: true,
       showPathPoints: true,
-      controlsCollapsed: false
+      controlsCollapsed: false,
+      autoRotate: true
     };
+    let autoRotateFrame = 0;
+    let autoRotateLastTs = 0;
 
     function setControlsCollapsed(collapsed, shouldResize = true) {
       state.controlsCollapsed = collapsed;
@@ -504,6 +507,34 @@
 
     function pointKey(p) {
       return `${p.damageLevel}-${p.quantityLevel}-${p.chanceLevel}`;
+    }
+
+    function stopAutoRotate() {
+      if (!state.autoRotate) return;
+      state.autoRotate = false;
+      if (autoRotateFrame) {
+        cancelAnimationFrame(autoRotateFrame);
+        autoRotateFrame = 0;
+      }
+      autoRotateLastTs = 0;
+    }
+
+    function startAutoRotate() {
+      if (!state.autoRotate || autoRotateFrame) return;
+      const step = (ts) => {
+        if (!state.autoRotate) {
+          autoRotateFrame = 0;
+          autoRotateLastTs = 0;
+          return;
+        }
+        if (!autoRotateLastTs) autoRotateLastTs = ts;
+        const dt = Math.min(80, ts - autoRotateLastTs);
+        autoRotateLastTs = ts;
+        state.yaw += dt * 0.0001;
+        draw();
+        autoRotateFrame = requestAnimationFrame(step);
+      };
+      autoRotateFrame = requestAnimationFrame(step);
     }
 
     const pointById = new Map(allPoints.map((p) => [pointKey(p), p]));
@@ -1255,6 +1286,7 @@ Delta (B - A):
     });
 
     controls.resetView.addEventListener("click", () => {
+      stopAutoRotate();
       state.yaw = -0.74;
       state.pitch = 0.42;
       state.zoom = 1.42;
@@ -1311,6 +1343,7 @@ Delta (B - A):
     }
 
     canvas.addEventListener("mousedown", (e) => {
+      stopAutoRotate();
       dragging = true;
       dragMoved = false;
       lastX = e.clientX;
@@ -1366,6 +1399,7 @@ Efficient Path Step: ${pathStep === null ? "No" : pathStep}`;
     });
 
     canvas.addEventListener("wheel", (e) => {
+      stopAutoRotate();
       e.preventDefault();
       state.zoom *= e.deltaY < 0 ? 1.08 : 0.92;
       state.zoom = clamp(state.zoom, 0.55, 3.7);
@@ -1375,6 +1409,7 @@ Efficient Path Step: ${pathStep === null ? "No" : pathStep}`;
     canvas.addEventListener("contextmenu", (e) => e.preventDefault());
 
     canvas.addEventListener("touchstart", (e) => {
+      stopAutoRotate();
       if (e.touches.length === 1) {
         const t = e.touches[0];
         touchMode = "rotate";
@@ -1474,6 +1509,7 @@ Efficient Path Step: ${pathStep === null ? "No" : pathStep}`;
 
     syncRangePairs();
     resizeCanvas();
+    startAutoRotate();
   </script>
 </body>
 </html>
