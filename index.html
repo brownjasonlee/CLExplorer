@@ -116,9 +116,46 @@
       overflow: auto;
       max-height: calc(100vh - 28px);
     }
+    .panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
     .panel h2 {
-      margin: 0 0 10px;
+      margin: 0;
       font-size: 17px;
+    }
+    #toggleControls {
+      width: 36px;
+      min-width: 36px;
+      height: 32px;
+      padding: 0;
+      font-size: 16px;
+      line-height: 1;
+    }
+    .panel-content {
+      display: block;
+    }
+    .app.controls-collapsed {
+      grid-template-columns: 1fr 58px;
+    }
+    .app.controls-collapsed .panel {
+      padding: 10px;
+      overflow: hidden;
+    }
+    .app.controls-collapsed .panel h2,
+    .app.controls-collapsed .panel-content {
+      display: none;
+    }
+    .app.controls-collapsed .panel-header {
+      justify-content: center;
+      margin-bottom: 0;
+    }
+    .app.controls-collapsed #toggleControls {
+      width: 34px;
+      min-width: 34px;
     }
     .group {
       border: 1px solid var(--line);
@@ -221,6 +258,19 @@
       .app { grid-template-columns: 1fr; }
       #viewport { height: 62vh; }
       .panel { max-height: unset; }
+      .app.controls-collapsed { grid-template-columns: 1fr; }
+      .app.controls-collapsed .panel h2,
+      .app.controls-collapsed .panel-content {
+        display: block;
+      }
+      .app.controls-collapsed .panel-header {
+        justify-content: space-between;
+        margin-bottom: 10px;
+      }
+      .app.controls-collapsed #toggleControls {
+        width: 36px;
+        min-width: 36px;
+      }
     }
   </style>
 </head>
@@ -243,7 +293,11 @@
     </div>
 
     <div class="panel">
-      <h2>Controls</h2>
+      <div class="panel-header">
+        <h2>Controls</h2>
+        <button id="toggleControls" title="Collapse controls" aria-label="Collapse controls">&lsaquo;</button>
+      </div>
+      <div class="panel-content">
 
       <div class="group">
         <h3>Axis Mapping</h3>
@@ -297,6 +351,7 @@
         <div class="check-row"><input id="showPathPoints" type="checkbox" checked /><label for="showPathPoints">Show efficient path points</label></div>
         <div class="stats" id="pathSummary"></div>
         <div class="path-steps" id="pathSteps"></div>
+      </div>
       </div>
     </div>
   </div>
@@ -368,6 +423,7 @@
     };
     const sizeDims = { ...dims, "Constant": "constant" };
 
+    const appEl = document.querySelector(".app");
     const canvas = document.getElementById("viewport");
     const ctx = canvas.getContext("2d");
     const tooltip = document.getElementById("tooltip");
@@ -401,7 +457,8 @@
       swapCompare: document.getElementById("swapCompare"),
       clearCompare: document.getElementById("clearCompare"),
       showPathLine: document.getElementById("showPathLine"),
-      showPathPoints: document.getElementById("showPathPoints")
+      showPathPoints: document.getElementById("showPathPoints"),
+      toggleControls: document.getElementById("toggleControls")
     };
 
     const state = {
@@ -424,8 +481,23 @@
       selectedA: null,
       selectedB: null,
       showPathLine: true,
-      showPathPoints: true
+      showPathPoints: true,
+      controlsCollapsed: false
     };
+
+    function setControlsCollapsed(collapsed) {
+      state.controlsCollapsed = collapsed;
+      appEl.classList.toggle("controls-collapsed", collapsed);
+      controls.toggleControls.innerHTML = collapsed ? "&rsaquo;" : "&lsaquo;";
+      controls.toggleControls.title = collapsed ? "Expand controls" : "Collapse controls";
+      controls.toggleControls.setAttribute("aria-label", controls.toggleControls.title);
+      try {
+        localStorage.setItem("clx_controls_collapsed", collapsed ? "1" : "0");
+      } catch (_err) {
+        // ignore storage failures
+      }
+      resizeCanvas();
+    }
 
     function pointKey(p) {
       return `${p.damageLevel}-${p.quantityLevel}-${p.chanceLevel}`;
@@ -575,6 +647,11 @@
     }
     bindFilterUI();
     renderPathPanel();
+    try {
+      setControlsCollapsed(localStorage.getItem("clx_controls_collapsed") === "1");
+    } catch (_err) {
+      setControlsCollapsed(false);
+    }
 
     function resizeCanvas() {
       const dpr = window.devicePixelRatio || 1;
@@ -1112,6 +1189,9 @@ Delta (B - A):
     controls.colorBy.addEventListener("change", updateFromControls);
     controls.showPareto.addEventListener("change", updateFromControls);
     controls.onlyPareto.addEventListener("change", updateFromControls);
+    controls.toggleControls.addEventListener("click", () => {
+      setControlsCollapsed(!state.controlsCollapsed);
+    });
     controls.showPathLine.addEventListener("change", updateFromControls);
     controls.showPathPoints.addEventListener("change", updateFromControls);
 
