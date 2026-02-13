@@ -61,6 +61,7 @@
       height: calc(100vh - 98px);
       cursor: grab;
       background: #0a1b33;
+      touch-action: none;
     }
     #viewport.dragging {
       cursor: grabbing;
@@ -280,7 +281,7 @@
       <div class="plot-header">
         <div>
           <div class="plot-title">Chain Lightning 3D Combination Explorer</div>
-          <div class="hint">Drag to rotate, wheel to zoom, Shift+drag to pan</div>
+          <div class="hint">Drag to rotate, wheel/pinch to zoom, Shift or two-finger drag to pan</div>
         </div>
         <div class="hint" id="countLabel">0 / 0 points</div>
       </div>
@@ -1277,6 +1278,37 @@ Delta (B - A):
     let dragMoved = false;
     let lastX = 0, lastY = 0;
     let panMode = false;
+    let touchMode = null;
+    let touchMoved = false;
+    let pinchStartDistance = 0;
+    let pinchStartZoom = state.zoom;
+    let pinchStartMidX = 0;
+    let pinchStartMidY = 0;
+    let pinchStartPanX = 0;
+    let pinchStartPanY = 0;
+    let touchTapClientX = 0;
+    let touchTapClientY = 0;
+
+    function getTouchDistance(t0, t1) {
+      return Math.hypot(t1.clientX - t0.clientX, t1.clientY - t0.clientY);
+    }
+
+    function getTouchMidpoint(t0, t1) {
+      return {
+        x: (t0.clientX + t1.clientX) * 0.5,
+        y: (t0.clientY + t1.clientY) * 0.5
+      };
+    }
+
+    function handlePointSelectionAtClient(clientX, clientY) {
+      const rect = canvas.getBoundingClientRect();
+      const mx = clientX - rect.left;
+      const my = clientY - rect.top;
+      const found = findPointAt(mx, my);
+      if (!found) return;
+      selectPoint(found.id);
+      draw();
+    }
 
     canvas.addEventListener("mousedown", (e) => {
       dragging = true;
@@ -1330,13 +1362,7 @@ Efficient Path Step: ${pathStep === null ? "No" : pathStep}`;
     });
     canvas.addEventListener("click", (e) => {
       if (dragMoved) return;
-      const rect = canvas.getBoundingClientRect();
-      const mx = e.clientX - rect.left;
-      const my = e.clientY - rect.top;
-      const found = findPointAt(mx, my);
-      if (!found) return;
-      selectPoint(found.id);
-      draw();
+      handlePointSelectionAtClient(e.clientX, e.clientY);
     });
 
     canvas.addEventListener("wheel", (e) => {
@@ -1347,6 +1373,104 @@ Efficient Path Step: ${pathStep === null ? "No" : pathStep}`;
     }, { passive: false });
 
     canvas.addEventListener("contextmenu", (e) => e.preventDefault());
+
+    canvas.addEventListener("touchstart", (e) => {
+      if (e.touches.length === 1) {
+        const t = e.touches[0];
+        touchMode = "rotate";
+        touchMoved = false;
+        lastX = t.clientX;
+        lastY = t.clientY;
+        touchTapClientX = t.clientX;
+        touchTapClientY = t.clientY;
+        canvas.classList.add("dragging");
+      } else if (e.touches.length >= 2) {
+        const t0 = e.touches[0];
+        const t1 = e.touches[1];
+        const mid = getTouchMidpoint(t0, t1);
+        touchMode = "pinch-pan";
+        touchMoved = true;
+        pinchStartDistance = Math.max(1, getTouchDistance(t0, t1));
+        pinchStartZoom = state.zoom;
+        pinchStartMidX = mid.x;
+        pinchStartMidY = mid.y;
+        pinchStartPanX = state.panX;
+        pinchStartPanY = state.panY;
+        canvas.classList.add("dragging");
+      }
+      tooltip.style.display = "none";
+    }, { passive: true });
+
+    canvas.addEventListener("touchmove", (e) => {
+      if (e.touches.length === 1 && touchMode === "rotate") {
+        e.preventDefault();
+        const t = e.touches[0];
+        const dx = t.clientX - lastX;
+        const dy = t.clientY - lastY;
+        if (Math.abs(dx) + Math.abs(dy) > 1) touchMoved = true;
+        lastX = t.clientX;
+        lastY = t.clientY;
+        state.yaw += dx * 0.008;
+        state.pitch += dy * 0.008;
+        draw();
+        return;
+      }
+
+      if (e.touches.length >= 2) {
+        e.preventDefault();
+        const t0 = e.touches[0];
+        const t1 = e.touches[1];
+        const mid = getTouchMidpoint(t0, t1);
+        const dist = Math.max(1, getTouchDistance(t0, t1));
+
+        if (touchMode !== "pinch-pan") {
+          touchMode = "pinch-pan";
+          touchMoved = true;
+          pinchStartDistance = dist;
+          pinchStartZoom = state.zoom;
+          pinchStartMidX = mid.x;
+          pinchStartMidY = mid.y;
+          pinchStartPanX = state.panX;
+          pinchStartPanY = state.panY;
+        }
+
+        const zoomFactor = dist / pinchStartDistance;
+        state.zoom = clamp(pinchStartZoom * zoomFactor, 0.55, 3.7);
+        state.panX = pinchStartPanX + (mid.x - pinchStartMidX);
+        state.panY = pinchStartPanY + (mid.y - pinchStartMidY);
+        draw();
+      }
+    }, { passive: false });
+
+    canvas.addEventListener("touchend", (e) => {
+      if (touchMode === "rotate" && !touchMoved && e.touches.length === 0) {
+        handlePointSelectionAtClient(touchTapClientX, touchTapClientY);
+      }
+
+      if (e.touches.length === 0) {
+        touchMode = null;
+        touchMoved = false;
+        canvas.classList.remove("dragging");
+        return;
+      }
+
+      if (e.touches.length === 1) {
+        const t = e.touches[0];
+        touchMode = "rotate";
+        touchMoved = true;
+        lastX = t.clientX;
+        lastY = t.clientY;
+        touchTapClientX = t.clientX;
+        touchTapClientY = t.clientY;
+      }
+    }, { passive: true });
+
+    canvas.addEventListener("touchcancel", () => {
+      touchMode = null;
+      touchMoved = false;
+      canvas.classList.remove("dragging");
+      tooltip.style.display = "none";
+    }, { passive: true });
 
     syncRangePairs();
     resizeCanvas();
